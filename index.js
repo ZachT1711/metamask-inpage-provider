@@ -310,7 +310,9 @@ MetamaskInpageProvider.prototype.send = function (methodOrPayload, params) {
  */
 
 /**
- * @returns {Object} - A promise that resolves to an object with:
+ * ethereum.enable with permissions and plugins
+ * 
+ * @returns {AuthorizationResponse} - A promise that resolves to an object with:
  * granted permissions and installed plugins.
  */
 MetamaskIMetamaskInpageProvider.prototype.authorize = async function (requestedPermissions) {
@@ -391,7 +393,7 @@ function getAuthorizeReturnObject (
   permissions, plugins = [],
 ) {
 
-  // TODO: fixed after LoginPerSite merge/rebase
+  // TODO: fixed after LoginPerSite merge/rebase (use named caveats)
   let accounts = []
   const accPerm = permissions.find(p => p.parentCapability === 'eth_accounts')
   if (accPerm && accPerm.caveats && accPerm.caveats.length > 0) {
