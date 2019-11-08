@@ -302,6 +302,81 @@ MetamaskInpageProvider.prototype.send = function (methodOrPayload, params) {
 }
 
 /**
+ * @returns {Promise<Array<Array>>} - A promise that resolves to an array with two members:
+ * granted permissions and installed plugins.
+ */
+MetamaskIMetamaskInpageProvider.prototype.authorize = async function (requestedPermissions) {
+
+  // input validation
+  if (
+    typeof requestedPermissions !== 'object' ||
+    Array.isArray(requestedPermissions) ||
+    Object.keys(requestedPermissions).length === 0
+  ) {
+    throw new Error('Invalid Params: Expected permissions request object.')
+  }
+
+  // find requested plugins, if any
+  const requestedPlugins = Object.keys(requestedPermissions).filter(
+    p => p.startsWith('wallet_plugin_')
+  )
+
+  // request permissions, then install plugins, if any
+  let possessedPermissions
+  return new Promise(async (resolve, reject) => {
+
+    this._sendAsync(
+      {
+        method: 'wallet_requestPermissions',
+        params: [requestedPermissions],
+      },
+      rpcPromiseCallback(resolve, reject)
+    )
+  })
+  .then(perms => {
+
+    possessedPermissions = perms
+
+    // just return the permissions if no plugins were requested
+    if (requestedPlugins.length === 0) {
+      return [possessedPermissions, []]
+    }
+
+    const permittedPlugins = possessedPermissions.map(perm => perm.parentCapability)
+      .filter(name => name.startsWith('wallet_plugin_'))
+    
+    const grantedPlugins = requestedPlugins.filter(name => permittedPlugins.includes(name))
+
+    // just return the permissions if no plugins were granted
+    if (grantedPlugins.length === 0) {
+      return [possessedPermissions, []]
+    }
+
+    // attempt to install newly granted plugins
+    return new Promise(async (resolve, reject) => {
+      
+      this._sendAsync(
+        {
+          method: 'wallet_installPlugins',
+          params: grantedPlugins,
+        },
+        rpcPromiseCallback(resolve, reject)
+      )
+    })
+    // just return the permissions and the installed plugins on success
+    .then(installedPlugins => [possessedPermissions, installedPlugins])
+    .catch(error => {
+      // if plugin installation fails, still return the permissions
+      if (error.code === 4301) { // plugin installation failed error
+        console.error(error)
+        return [possessedPermissions, []]
+      }
+      else throw error
+    })
+  })
+}
+
+/**
  * Deprecated.
  * Equivalent to: ethereum.send('eth_requestAccounts')
  * 
@@ -397,7 +472,6 @@ MetamaskInpageProvider.prototype._requestAccounts = function () {
       return new Promise((resolve, reject) => {
         this._sendAsync(
           {
-            jsonrpc: '2.0',
             method: 'wallet_requestPermissions',
             params: [{ eth_accounts: {} }],
           },
