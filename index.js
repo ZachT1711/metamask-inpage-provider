@@ -302,7 +302,15 @@ MetamaskInpageProvider.prototype.send = function (methodOrPayload, params) {
 }
 
 /**
- * @returns {Promise<Array<Array>>} - A promise that resolves to an array with two members:
+ * ethereum.authorize result
+ * @typedef {Object} AuthorizationResponse
+ * @property {Array<string>} accounts - The available accounts.
+ * @property {Array<Object>} permissions - The granted permissions.
+ * @property {Array<string>} plugin - The available plugins.
+ */
+
+/**
+ * @returns {Object} - A promise that resolves to an object with:
  * granted permissions and installed plugins.
  */
 MetamaskIMetamaskInpageProvider.prototype.authorize = async function (requestedPermissions) {
@@ -313,7 +321,7 @@ MetamaskIMetamaskInpageProvider.prototype.authorize = async function (requestedP
     Array.isArray(requestedPermissions) ||
     Object.keys(requestedPermissions).length === 0
   ) {
-    throw new Error('Invalid Params: Expected permissions request object.')
+    throw new Error('Invalid Params: Expected permissions request object with at least one permission.')
   }
 
   // find requested plugins, if any
@@ -322,7 +330,7 @@ MetamaskIMetamaskInpageProvider.prototype.authorize = async function (requestedP
   )
 
   // request permissions, then install plugins, if any
-  let possessedPermissions
+  let permissions
   return new Promise(async (resolve, reject) => {
 
     this._sendAsync(
@@ -335,21 +343,21 @@ MetamaskIMetamaskInpageProvider.prototype.authorize = async function (requestedP
   })
   .then(perms => {
 
-    possessedPermissions = perms
+    permissions = perms
 
     // just return the permissions if no plugins were requested
     if (requestedPlugins.length === 0) {
-      return [possessedPermissions, []]
+      return getAuthorizeReturnObject(permissions)
     }
 
-    const permittedPlugins = possessedPermissions.map(perm => perm.parentCapability)
+    const permittedPlugins = permissions.map(perm => perm.parentCapability)
       .filter(name => name.startsWith('wallet_plugin_'))
     
     const grantedPlugins = requestedPlugins.filter(name => permittedPlugins.includes(name))
 
     // just return the permissions if no plugins were granted
     if (grantedPlugins.length === 0) {
-      return [possessedPermissions, []]
+      return getAuthorizeReturnObject(permissions)
     }
 
     // attempt to install newly granted plugins
@@ -364,16 +372,33 @@ MetamaskIMetamaskInpageProvider.prototype.authorize = async function (requestedP
       )
     })
     // just return the permissions and the installed plugins on success
-    .then(installedPlugins => [possessedPermissions, installedPlugins])
+    .then(installedPlugins => {
+      return getAuthorizeReturnObject(permissions, installedPlugins)
+    })
     .catch(error => {
       // if plugin installation fails, still return the permissions
       if (error.code === 4301) { // plugin installation failed error
         console.error(error)
-        return [possessedPermissions, []]
+        return getAuthorizeReturnObject(permissions)
       }
       else throw error
     })
   })
+}
+
+// ethereum.authorize(permissions) helper
+function getAuthorizeReturnObject (
+  permissions, plugins = [],
+) {
+
+  // TODO: fixed after LoginPerSite merge/rebase
+  let accounts = []
+  const accPerm = permissions.find(p => p.parentCapability === 'eth_accounts')
+  if (accPerm && accPerm.caveats && accPerm.caveats.length > 0) {
+    accounts = accPerm.caveats[0].value
+  }
+
+  return { permissions, accounts, plugins }
 }
 
 /**
