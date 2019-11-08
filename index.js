@@ -315,7 +315,7 @@ MetamaskInpageProvider.prototype.send = function (methodOrPayload, params) {
  * @returns {AuthorizationResponse} - A promise that resolves to an object with:
  * granted permissions and installed plugins.
  */
-MetamaskIMetamaskInpageProvider.prototype.authorize = async function (requestedPermissions) {
+MetamaskInpageProvider.prototype.authorize = async function (requestedPermissions) {
 
   // input validation
   if (
