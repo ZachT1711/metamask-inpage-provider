@@ -311,13 +311,18 @@ MetamaskInpageProvider.prototype.authorize = async function (requestedPermission
       return getAuthorizeReturnObject(permissions)
     }
 
+    const installParam = grantedPlugins.reduce((acc, name) => {
+      acc[name] = {}
+      return acc
+    }, {})
+
     // attempt to install newly granted plugins
     return new Promise(async (resolve, reject) => {
       
       this._sendAsync(
         {
           method: 'wallet_installPlugins',
-          params: grantedPlugins,
+          params: [installParam],
         },
         rpcPromiseCallback(resolve, reject)
       )
