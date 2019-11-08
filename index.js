@@ -14,7 +14,6 @@ const { sendSiteMetadata } = require('./siteMetadata')
 const {
   createErrorMiddleware,
   logStreamDisconnectWarning,
-  makeThenable,
 } = require('./utils')
 
 // resolve response.result, reject errors
@@ -26,23 +25,16 @@ const rpcPromiseCallback = (resolve, reject) => (error, response) => {
 
 module.exports = MetamaskInpageProvider
 
-/**
- * TODO:deprecate:2019-12-16
- *  _sendSync and related functionality
- */
-
 inherits(MetamaskInpageProvider, SafeEventEmitter)
 
 // private state, kept here in part for use in the _metamask proxy
 const _state = {
 
   sentWarnings: {
-    autoReload: false,
     enable: false,
     experimentalMethods: false,
     isConnected: false,
     sendAsync: false,
-    sendSync: false,
     signTypedData: false,
   },
   sentSiteMetadata: false,
@@ -146,17 +138,6 @@ function MetamaskInpageProvider (connectionStream) {
 
   // indicate that we've connected, for EIP-1193 compliance
   setTimeout(() => this.emit('connect'))
-
-  // TODO:deprecate:2019-12-16
-  // wait a second to attempt to send this, so that the warning can be silenced
-  // moved this here because there's another warning in .enable() discouraging
-  // the use thereof per EIP 1102
-  setTimeout(() => {
-    if (this.autoRefreshOnNetworkChange && !_state.sentWarnings.autoReload) {
-      console.warn(messages.warnings.autoReloadDeprecation)
-      _state.sentWarnings.autoReload = true
-    }
-  }, 1000)
 }
 
 // TODO:deprecate:2019-12-16
@@ -190,27 +171,6 @@ MetamaskInpageProvider.prototype._metamask = new Proxy(
      */
     isUnlocked: async function () {
       return _state.isUnlocked
-    },
-
-    // TODO:deprecate:2019-12-16 isEnabled, isApproved
-    /**
-     * Deprecated. Will be removed on 2019-12-16.
-     * Synchronously determines if this domain is currently enabled, with a potential false negative if called to soon
-     *
-     * @returns {boolean} - returns true if this domain is currently enabled
-     */
-    isEnabled: function () {
-      return Array.isArray(_state.accounts) && _state.accounts.length > 0 
-    },
-
-    /**
-     * Deprecated. Will be removed on 2019-12-16.
-     * Asynchronously determines if this domain is currently enabled
-     *
-     * @returns {Promise<boolean>} - Promise resolving to true if this domain is currently enabled
-     */
-    isApproved: async function () {
-      return Array.isArray(_state.accounts) && _state.accounts.length > 0 
     },
   },
   {
@@ -261,17 +221,6 @@ MetamaskInpageProvider.prototype.send = function (methodOrPayload, params) {
     } else {
 
       payload = methodOrPayload
-
-      // TODO:deprecate:2019-12-16
-      // backwards compatibility: "synchronous" methods
-      if ([
-        'eth_accounts',
-        'eth_coinbase',
-        'eth_uninstallFilter',
-        'net_version',
-      ].includes(payload.method)) {
-        return this._sendSync(payload)
-      }
     }
   }
 
@@ -435,49 +384,6 @@ MetamaskInpageProvider.prototype.sendAsync = function (payload, cb) {
 }
 
 /**
- * Deprecated.
- * Internal backwards compatibility method.
- */
-MetamaskInpageProvider.prototype._sendSync = function (payload) {
-
-  if (!_state.sentWarnings.sendSync) {
-    console.warn(messages.warnings.sendSyncDeprecation)
-    _state.sentWarnings.sendSync = true
-  }
-
-  let result
-  switch (payload.method) {
-
-    case 'eth_accounts':
-      result = this.selectedAddress ? [this.selectedAddress] : []
-      break
-
-    case 'eth_coinbase':
-      result = this.selectedAddress || null
-      break
-
-    case 'eth_uninstallFilter':
-      this.sendAsync(payload, () => {})
-      result = true
-      break
-
-    case 'net_version':
-      result = this.networkVersion || null
-      break
-
-    default:
-      throw new Error(messages.errors.unsupportedSync(payload.method))
-  }
-
-  // looks like a plain object, but behaves like a Promise if someone calls .then on it :evil_laugh:
-  return makeThenable({
-    id: payload.id,
-    jsonrpc: payload.jsonrpc,
-    result,
-  }, 'result')
-}
-
-/**
  * Internal method for calling EIP-1102 eth_requestAccounts.
  * Attempts to call eth_accounts before requesting the permission.
  */
@@ -603,11 +509,5 @@ MetamaskInpageProvider.prototype._handleAccountsChanged = function (accounts) {
   // handle selectedAddress
   if (this.selectedAddress !== accounts[0]) {
     this.selectedAddress = accounts[0] || null
-  }
-
-  // TODO:deprecate:2019-12-16
-  // handle web3
-  if (window.web3) {
-    window.web3.eth.defaultAccount = this.selectedAddress
   }
 }
